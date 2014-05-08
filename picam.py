@@ -3,14 +3,15 @@
 
 import StringIO
 import subprocess
-import picamera
 import os
 import time
+import picamera
 from datetime import datetime
 from PIL import Image
 
 camera = picamera.PiCamera()
 camera.resolution = (100,75)
+
 
 # Motion detection settings:
 # Threshold          - how much a pixel has to change by to be marked as "changed"
@@ -42,20 +43,19 @@ testHeight = 75
 testAreaCount = 1
 testBorders = [ [[1,testWidth],[1,testHeight]] ]  # [ [[start pixel on left side,end pixel on right side],[start pixel on top side,stop pixel on bottom side]] ]
 
-debugMode = True # False or True
+
+debugMode = False # False or True
+
+
+def getFileName2():  # new
+    print "File name 2"
+    return datetime.datetime.now().strftime("%H.%M.%S.%f.bmp")
 
 # Capture a small test image (for motion detection)
 def captureTestImage(settings, width, height):
-    #command = "raspistill %s -w %s -h %s -t 200 -e bmp -n -o -" % (settings, width, height)
-    #imageData = StringIO.StringIO()
-    #imageData.write(subprocess.check_output(command, shell=True))
-    #imageData.seek(0)
-    #im = Image.open(imageData)
-    #buffer = im.load()
-    #imageData.close()
-    #return im, buffer
-    camera.capture("nose.bmp")
-    im = Image.open("nose.bmp") 
+    fileName = getFileName2()
+    camera.capture(fileName)
+    im = Image.open(fileName) 
     buffer = im.load()
     return im, buffer
 
@@ -93,7 +93,6 @@ def getFileName():  # new
 
 # Get first image
 image1, buffer1 = captureTestImage(cameraSettings, testWidth, testHeight)
-
 # Reset last capture time
 lastCapture = time.time()
 #cam.start_preview()
@@ -101,14 +100,12 @@ lastCapture = time.time()
 cameraRecording = False;
 
 while (True):
-
     # Get comparison image
     image2, buffer2 = captureTestImage(cameraSettings, testWidth, testHeight)
 
     # Count changed pixels
     changedPixels = 0
     detectMotion = False
-
     if (debugMode): # in debug mode, save a bitmap-file with marked changed pixels and with visible testarea-borders
         debugimage = Image.new("RGB",(testWidth, testHeight))
         debugim = debugimage.load()
@@ -129,7 +126,7 @@ while (True):
                         debugim[x,y] = (0, 255, 0) # in debug mode, mark all changed pixel to green
                 # Save an image if pixels changed
                 if (changedPixels > sensitivity):
-		    print "detect motion = true"
+            print "detect motion = true"
                     detectMotion = True # will shoot the photo later
                 
                 if ((debugMode == False) and (changedPixels > sensitivity)):
@@ -151,7 +148,7 @@ while (True):
             detectMotion = True
 
     if detectMotion:
-	print "detected motion if"
+    print "detected motion if"
         if (cameraRecording == False) :
             print "START recording"
             lastCapture = time.time()
@@ -163,8 +160,8 @@ while (True):
     else:
         if cameraRecording:
             print "STOP recording"
-            cam.stop_recording()
-	    cameraRecording = False 
+            camera.stop_recording()
+        cameraRecording = False 
 
 
 
