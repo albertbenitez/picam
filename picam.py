@@ -1,12 +1,20 @@
 #!/usr/bin/python
  
  
+import smtplib
 import StringIO
 import subprocess
 import os
 import time
 from datetime import datetime
 from PIL import Image
+from email.mime.text import MIMEText
+ 
+ 
+ 
+ 
+ 
+                                ### CAMERA CONFIGURATION ###
  
  
 # Motion detection settings:
@@ -17,20 +25,21 @@ from PIL import Image
 # filenamePrefix     - string that prefixes the file name for easier identification of files.
 # diskSpaceToReserve - Delete oldest images to avoid filling disk. How much byte to keep free on disk.
 # cameraSettings     - "" = no extra settings; "-hf" = Set horizontal flip of image; "-vf" = Set vertical flip; "-hf -vf" = both horizontal and vertical flip
-
-threshold = 50
+ 
+threshold = 100
 sensitivity = 100
 forceCapture = True
 forceCaptureTime = 60 * 60 # Once an hour
-filepath = "/home/pi/picam"
+filepath = "/home/pi/www/picam"
 filenamePrefix = "capture"
 diskSpaceToReserve = 40 * 1024 * 1024 # Keep 40 mb free on disk
 cameraSettings = ""
  
+ 
 # settings of the photos to save
-saveWidth   = 1296
-saveHeight  = 972
-saveQuality = 15 # Set jpeg quality (0 to 100)
+# saveWidth   = 1296
+# saveHeight  = 972
+# saveQuality = 15 # Set jpeg quality (0 to 100)
  
 # Test-Image settings
 testWidth = 100
@@ -41,14 +50,43 @@ testAreaCount = 1
 testBorders = [ [[1,testWidth],[1,testHeight]] ]  # [ [[start pixel on left side,end pixel on right side],[start pixel on top side,stop pixel on bottom side]] ]
  
  
-debugMode = False # False or True
+                                ### EMAIL CONFIGURATION  ###
+ 
+TO = 'random@random.com'
+SUBJECT = 'ALLARM'
+TEXT = 'MOTION DETECTED'
+ 
+#GMail Credential
+ 
+gmail_sender = 'media2014services@gmail.com'
+gmail_passwd = 'albertluca123'
  
  
-#######################################################################################################################
-
-
-# Capture a small test image (for motion detection)
-
+ 
+server = smtplib.SMTP('smtp.gmail.com', 587)
+server.ehlo()
+server.starttls()
+server.ehlo
+server.login(gmail_sender, gmail_passwd)
+ 
+BODY = '\r\n'.join([
+        'To: %s' %TO,
+        'From: %s' %gmail_sender,
+        'Subject: %s' % SUBJECT,
+        '',
+        TEXT
+        ])
+ 
+ 
+ 
+#server.quit()
+ 
+ 
+                                ### FUNCTIONS CONFIGURATION  ###
+ 
+ 
+# Capture a small test image (MOTION DETACTION)
+ 
 def captureTestImage(settings, width, height):
     command = "raspistill %s -w %s -h %s -t 200 -e bmp -n -o -" % (settings, width, height)
     imageData = StringIO.StringIO()
@@ -68,44 +106,26 @@ def saveImage(settings, width, height, quality, diskSpaceToReserve):
     subprocess.call("raspistill %s -w %s -h %s -t 200 -e jpg -q %s -n -o %s" % (settings, width, height, quality, filename), shell=True)
     print "Captured %s" % filename
  
-# Keep free space above given level
-def keepDiskSpaceFree(bytesToReserve):
-    if (getFreeSpace() < bytesToReserve):
-        for filename in sorted(os.listdir(filepath + "/")):
-            if filename.startswith(filenamePrefix) and filename.endswith(".jpg"):
-                os.remove(filepath + "/" + filename)
-                print "Deleted %s/%s to avoid filling disk" % (filepath,filename)
-                if (getFreeSpace() > bytesToReserve):
-                    return
- 
-# Get available disk space
-def getFreeSpace():
-    st = os.statvfs(filepath + "/")
-    du = st.f_bavail * st.f_frsize
-    return du
- 
- 
-def getFileName():  # new
-    print "File name"
-    return datetime.datetime.now().strftime("%Y-%m-%d_%H.%M.%S.h264")
- 
- 
  
 # Get first image
 image1, buffer1 = captureTestImage(cameraSettings, testWidth, testHeight)
+ 
+ 
 # Reset last capture time
 lastCapture = time.time()
-#cam.start_preview()
-
-count = 0;
-
-######################################################################################################################
-
-
+ 
+ 
+ 
+ 
+ 
+                                   ### MOTION DETECTION ALGORITHM ###
+ 
+ 
+debugMode = False # use during the TEST
  
 cameraRecording = False;
+count = 1;
  
-
 while (True):
    
     # Get comparison image
@@ -122,7 +142,7 @@ while (True):
     for z in xrange(0, testAreaCount): # = xrange(0,1) with default-values = z will only have the value of 0 = only one scan-area = whole picture
         for x in xrange(testBorders[z][0][0]-1, testBorders[z][0][1]): # = xrange(0,100) with default-values
             for y in xrange(testBorders[z][1][0]-1, testBorders[z][1][1]):   # = xrange(0,75) with default-values; testBorders are NOT zero-based, buffer1[x,y] are zero-based (0,0 is top left of image, testWidth-1,testHeight-1 is botton right)
-
+ 
                 if (debugMode):
                     debugim[x,y] = buffer2[x,y]
                     if ((x == testBorders[z][0][0]-1) or (x == testBorders[z][0][1]-1) or (y == testBorders[z][1][0]-1) or (y == testBorders[z][1][1]-1)):
@@ -135,10 +155,10 @@ while (True):
                     changedPixels += 1
                     if (debugMode):
                         debugim[x,y] = (0, 255, 0) # in debug mode, mark all changed pixel to green
-                # Save an image if pixels changed
+               
                 if (changedPixels > sensitivity):
                    
-                    detectMotion = True # will shoot the photo later
+                    detectMotion = True
                
                 if ((debugMode == False) and (changedPixels > sensitivity)):
                     break  # break the y loop
@@ -150,23 +170,30 @@ while (True):
     if (debugMode):
         debugimage.save(filepath + "/debug.bmp") # save debug image as bmp
         print "debug.bmp saved, %s changed pixel" % changedPixels
-
-    # Check force capture
+ 
+                               
+ 
+ 
+                                ### VIDEO RECORDING ALGORITHM ###
+ 
+ 
     if forceCapture:
         if time.time() - lastCapture > forceCaptureTime:
             detectMotion = True
  
     if detectMotion:
-        print "detected motion if"
-        if (cameraRecording == False) :
-            print "START recording"
+        if (cameraRecording == False) :              
+            print "MOTION DETECTED: START video"
             lastCapture = time.time()
-            filename = filepath + "/" + "video_" + "%d" % count
-        count = count +1
-        print "count %d" % count
+            filename = filepath + "/" + "Video_" + "%d" % count
+            count = count +1  
             cameraRecording = True
-            subprocess.call("raspivid -o %s.h264 -t 2000 -p 100,100,600,500" % filename, shell=True)
-        
-
-
+            subprocess.call("raspivid -o %s.mp4 -t 5000 -p 100,100,600,500" % filename, shell=True)
+       
             cameraRecording = False
+            
+            try:
+                server.sendmail(gmail_sender, [TO], BODY)
+                print 'email sent'
+            except:
+                print 'error'
